@@ -18,6 +18,7 @@ class Minimal_Meta_CAPI_No_Pixel {
     add_action('admin_menu', [$this, 'admin_menu']);
     add_action('admin_init', [$this, 'register_settings']);
     add_shortcode('meta_capi_conversion', [$this, 'shortcode_fire_conversion']);
+    add_action('woocommerce_thankyou', [$this, 'woocommerce_thankyou'], 10);
   }
 
   public function capture_fbclid() {
@@ -123,6 +124,24 @@ class Minimal_Meta_CAPI_No_Pixel {
       'mmcapi_main'
     );
 
+    // WooCommerce integration checkbox
+    add_settings_field(
+      'woocommerce_enabled',
+      esc_html('WooCommerce Integration'),
+      function () {
+        $opts = get_option(self::OPT_KEY, []);
+        $checked = !empty($opts['woocommerce_enabled']);
+        printf(
+          '<label><input type="checkbox" name="%s[woocommerce_enabled]" value="1" %s /> Enable on WooCommerce thank you page</label>',
+          esc_attr(self::OPT_KEY),
+          checked($checked, true, false)
+        );
+        echo '<p class="description">Automatically fire conversion events on order completion.</p>';
+      },
+      'minimal-meta-capi',
+      'mmcapi_main'
+    );
+
     // Debug logging checkbox
     add_settings_field(
       'debug_logging',
@@ -144,12 +163,18 @@ class Minimal_Meta_CAPI_No_Pixel {
 
   public function sanitize_settings($in) {
     return [
-      'pixel_id'         => isset($in['pixel_id']) ? preg_replace('/\D+/', '', $in['pixel_id']) : '',
-      'access_token'     => isset($in['access_token']) ? sanitize_text_field($in['access_token']) : '',
-      'event_name'       => isset($in['event_name']) ? sanitize_text_field($in['event_name']) : 'Purchase',
-      'test_event_code'  => isset($in['test_event_code']) ? sanitize_text_field($in['test_event_code']) : '',
-      'debug_logging'    => !empty($in['debug_logging']) ? 1 : 0,
+      'pixel_id'            => isset($in['pixel_id']) ? preg_replace('/\D+/', '', $in['pixel_id']) : '',
+      'access_token'        => isset($in['access_token']) ? sanitize_text_field($in['access_token']) : '',
+      'event_name'          => isset($in['event_name']) ? sanitize_text_field($in['event_name']) : 'Purchase',
+      'test_event_code'     => isset($in['test_event_code']) ? sanitize_text_field($in['test_event_code']) : '',
+      'woocommerce_enabled' => !empty($in['woocommerce_enabled']) ? 1 : 0,
+      'debug_logging'       => !empty($in['debug_logging']) ? 1 : 0,
     ];
+  }
+
+  public static function is_woocommerce_enabled() {
+    $opts = get_option(self::OPT_KEY, []);
+    return !empty($opts['woocommerce_enabled']);
   }
 
   private function debug_log($message) {
@@ -250,6 +275,13 @@ class Minimal_Meta_CAPI_No_Pixel {
 
     // Silent by default; return empty to not affect page output.
     return '';
+  }
+
+  public function woocommerce_thankyou($order_id) {
+    // Only fire if WooCommerce integration is enabled
+    if (self::is_woocommerce_enabled()) {
+      echo do_shortcode('[meta_capi_conversion]');
+    }
   }
 
   private function make_fbc_from_fbclid($fbclid) {
