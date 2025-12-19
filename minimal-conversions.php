@@ -37,8 +37,8 @@ class Minimal_Meta_CAPI_No_Pixel {
 
   public function admin_menu() {
     add_options_page(
-      'Minimal Meta CAPI',
-      'Minimal Meta CAPI',
+      'Minimal Meta Conversions',
+      'Minimal Meta Conversions',
       'manage_options',
       'minimal-meta-capi',
       [$this, 'settings_page']
@@ -55,7 +55,6 @@ class Minimal_Meta_CAPI_No_Pixel {
     $fields = [
       'pixel_id' => 'Pixel ID',
       'access_token' => 'Access Token',
-      'event_name' => 'Event Name (e.g. Lead, Purchase)',
       'test_event_code' => 'Test Event Code (optional)',
     ];
 
@@ -72,28 +71,72 @@ class Minimal_Meta_CAPI_No_Pixel {
             esc_attr($key),
             esc_attr($val)
           );
-          if ($key === 'event_name') {
-            echo '<p class="description">Default is "Lead" if left blank.</p>';
-          }
         },
         'minimal-meta-capi',
         'mmcapi_main'
       );
     }
+
+    // Event name dropdown with standard Meta event names
+    add_settings_field(
+      'event_name',
+      esc_html('Event Name'),
+      function () {
+        $opts = get_option(self::OPT_KEY, []);
+        $val  = isset($opts['event_name']) ? $opts['event_name'] : 'Purchase';
+
+        $standard_events = [
+          'Lead' => 'Lead',
+          'Purchase' => 'Purchase',
+          'CompleteRegistration' => 'Complete Registration',
+          'Contact' => 'Contact',
+          'SubmitApplication' => 'Submit Application',
+          'AddToCart' => 'Add to Cart',
+          'InitiateCheckout' => 'Initiate Checkout',
+          'AddPaymentInfo' => 'Add Payment Info',
+          'Subscribe' => 'Subscribe',
+          'StartTrial' => 'Start Trial',
+          'ViewContent' => 'View Content',
+          'Search' => 'Search',
+          'AddToWishlist' => 'Add to Wishlist',
+          'Schedule' => 'Schedule',
+        ];
+
+        printf('<select name="%s[event_name]" class="regular-text">', esc_attr(self::OPT_KEY));
+        foreach ($standard_events as $event_value => $event_label) {
+          printf(
+            '<option value="%s" %s>%s</option>',
+            esc_attr($event_value),
+            selected($val, $event_value, false),
+            esc_html($event_label)
+          );
+        }
+        echo '</select>';
+        echo '<p class="description">Select the standard Meta event to track.</p>';
+      },
+      'minimal-meta-capi',
+      'mmcapi_main'
+    );
   }
 
   public function sanitize_settings($in) {
     return [
       'pixel_id'         => isset($in['pixel_id']) ? preg_replace('/\D+/', '', $in['pixel_id']) : '',
       'access_token'     => isset($in['access_token']) ? sanitize_text_field($in['access_token']) : '',
-      'event_name'       => isset($in['event_name']) ? sanitize_text_field($in['event_name']) : 'Lead',
+      'event_name'       => isset($in['event_name']) ? sanitize_text_field($in['event_name']) : 'Purchase',
       'test_event_code'  => isset($in['test_event_code']) ? sanitize_text_field($in['test_event_code']) : '',
     ];
   }
 
   public function settings_page() {
     if (!current_user_can('manage_options')) return;
-    echo '<div class="wrap"><h1>Minimal Meta CAPI</h1>';
+    echo '<div class="wrap"><h1>Minimal Meta Conversions</h1>';
+    echo '<p class="description" style="max-width: 800px; margin-bottom: 20px;">';
+    echo 'This plugin provides privacy-focused, server-side conversion tracking for Meta (Facebook) ads without requiring the Meta Pixel. ';
+    echo 'When visitors click a Meta ad, the <code>fbclid</code> parameter is captured and stored as a first-party cookie. ';
+    echo 'When they reach the conversion page (containing the shortcode), a server-side event is sent to Meta\'s Conversions API, ';
+    echo 'allowing Meta to attribute the conversion while minimizing client-side tracking and improving compatibility with ad blockers.';
+    echo '</p>';
     echo '<form method="post" action="options.php">';
     settings_fields('mmcapi_group');
     do_settings_sections('minimal-meta-capi');
@@ -112,7 +155,7 @@ class Minimal_Meta_CAPI_No_Pixel {
     $opts = get_option(self::OPT_KEY, []);
     $pixel_id = isset($opts['pixel_id']) ? $opts['pixel_id'] : '';
     $token    = isset($opts['access_token']) ? $opts['access_token'] : '';
-    $event    = !empty($opts['event_name']) ? $opts['event_name'] : 'Lead';
+    $event    = !empty($opts['event_name']) ? $opts['event_name'] : 'Purchase';
     $testcode = !empty($opts['test_event_code']) ? $opts['test_event_code'] : '';
 
     if (empty($pixel_id) || empty($token)) return '';
