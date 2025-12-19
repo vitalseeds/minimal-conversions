@@ -135,7 +135,7 @@ class Minimal_Meta_CAPI_No_Pixel {
           esc_attr(self::OPT_KEY),
           checked($checked, true, false)
         );
-        echo '<p class="description">Log fbclid captures and API calls to WordPress debug log.</p>';
+        echo '<p class="description">Log fbclid captures and API calls to <code>wp-content/minimal-conversions.log</code>.</p>';
       },
       'minimal-meta-capi',
       'mmcapi_main'
@@ -155,7 +155,10 @@ class Minimal_Meta_CAPI_No_Pixel {
   private function debug_log($message) {
     $opts = get_option(self::OPT_KEY, []);
     if (!empty($opts['debug_logging'])) {
-      error_log('[Minimal Meta CAPI] ' . $message);
+      $log_file = WP_CONTENT_DIR . '/minimal-conversions.log';
+      $timestamp = current_time('Y-m-d H:i:s');
+      $log_entry = sprintf("[%s] %s\n", $timestamp, $message);
+      error_log($log_entry, 3, $log_file);
     }
   }
 

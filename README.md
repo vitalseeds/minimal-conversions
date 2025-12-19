@@ -27,7 +27,7 @@ Required settings (Settings > Minimal Meta Conversions):
 Optional settings:
 
 - **Test Event Code** - For testing (generate in Events Manager > Test Events)
-- **Debug Logging** - Enable to log events to WordPress debug log
+- **Debug Logging** - Enable to log events to plugin log file
 
 ## Usage
 
@@ -76,19 +76,17 @@ The shortcode fires a conversion event when:
 
 ## Debugging
 
-Enable debug logging in plugin settings. Logs appear in `wp-content/debug.log`:
+Enable debug logging checkbox in plugin settings. Logs are written to:
 
-- `[Minimal Meta CAPI] Captured fbclid from URL: ...`
-- `[Minimal Meta CAPI] Firing conversion event: ...`
-- `[Minimal Meta CAPI] API Response [200]: ...`
+**Log file:** `wp-content/minimal-conversions.log`
 
-Requires `WP_DEBUG_LOG` enabled in `wp-config.php`:
+Example log entries:
 
-```php
-define('WP_DEBUG', true);
-define('WP_DEBUG_LOG', true);
-define('WP_DEBUG_DISPLAY', false);
-```
+- `[2025-01-15 14:23:45] Captured fbclid from URL: abc123...`
+- `[2025-01-15 14:25:10] Firing conversion event: Purchase | fbclid: abc123...`
+- `[2025-01-15 14:25:11] API Response [200]: {"events_received":1...}`
+
+**No WP_DEBUG required** - The plugin writes to its own log file independently.
 
 ## Version
 
