@@ -215,6 +215,7 @@ class Minimal_Meta_CAPI_No_Pixel {
     echo 'When they reach the conversion page (containing the shortcode), a server-side event is sent to Meta\'s Conversions API, ';
     echo 'allowing Meta to attribute the conversion while minimizing client-side tracking and improving compatibility with ad blockers.';
     echo '</p>';
+    echo '<p class="description">For documentation see <a href="https://github.com/vitalseeds/minimal-conversions#">readme</a>.</p>';
     echo '<form method="post" action="options.php">';
     settings_fields('mmcapi_group');
     do_settings_sections('minimal-meta-capi');
