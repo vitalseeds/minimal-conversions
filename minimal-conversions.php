@@ -142,6 +142,24 @@ class Minimal_Meta_CAPI_No_Pixel {
       'mmcapi_main'
     );
 
+    // Include user data checkbox
+    add_settings_field(
+      'include_user_data',
+      esc_html('Include User Data'),
+      function () {
+        $opts = get_option(self::OPT_KEY, []);
+        $checked = !empty($opts['include_user_data']);
+        printf(
+          '<label><input type="checkbox" name="%s[include_user_data]" value="1" %s /> Send IP address and user agent to Meta</label>',
+          esc_attr(self::OPT_KEY),
+          checked($checked, true, false)
+        );
+        echo '<p class="description">Improves event matching but shares more user data. Uncheck for minimal tracking.</p>';
+      },
+      'minimal-meta-capi',
+      'mmcapi_main'
+    );
+
     // Debug logging checkbox
     add_settings_field(
       'debug_logging',
@@ -168,6 +186,7 @@ class Minimal_Meta_CAPI_No_Pixel {
       'event_name'          => isset($in['event_name']) ? sanitize_text_field($in['event_name']) : 'Purchase',
       'test_event_code'     => isset($in['test_event_code']) ? sanitize_text_field($in['test_event_code']) : '',
       'woocommerce_enabled' => !empty($in['woocommerce_enabled']) ? 1 : 0,
+      'include_user_data'   => !empty($in['include_user_data']) ? 1 : 0,
       'debug_logging'       => !empty($in['debug_logging']) ? 1 : 0,
     ];
   }
@@ -211,6 +230,10 @@ class Minimal_Meta_CAPI_No_Pixel {
     // Prevent accidental firing in admin/editor previews.
     if (is_admin()) return '';
 
+    // Parse shortcode attributes
+    $atts = shortcode_atts(['order_id' => 0], $atts);
+    $order_id = absint($atts['order_id']);
+
     $opts = get_option(self::OPT_KEY, []);
     $pixel_id = isset($opts['pixel_id']) ? $opts['pixel_id'] : '';
     $token    = isset($opts['access_token']) ? $opts['access_token'] : '';
@@ -229,22 +252,38 @@ class Minimal_Meta_CAPI_No_Pixel {
 
     $fbc = $this->make_fbc_from_fbclid($fbclid);
 
-    $ip = $this->get_client_ip();
-    $ua = isset($_SERVER['HTTP_USER_AGENT']) ? substr(sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'])), 0, 1000) : '';
     $url = (is_ssl() ? 'https://' : 'http://') . (isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : '') . (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : '');
 
+    // Build user_data - always include fbc, optionally include IP and user agent
+    $user_data = ['fbc' => $fbc];
+
+    if (!empty($opts['include_user_data'])) {
+      $user_data['client_ip_address'] = $this->get_client_ip();
+      $user_data['client_user_agent'] = isset($_SERVER['HTTP_USER_AGENT']) ? substr(sanitize_text_field(wp_unslash($_SERVER['HTTP_USER_AGENT'])), 0, 1000) : '';
+    }
+
+    // Build event data
+    $event_data = [
+      'event_name'       => $event,
+      'event_time'       => time(),
+      'action_source'    => 'website',
+      'event_source_url' => $url,
+      'user_data'        => array_filter($user_data),
+    ];
+
+    // Add custom_data for Purchase events with WooCommerce order data
+    if ($order_id > 0 && function_exists('wc_get_order')) {
+      $order = wc_get_order($order_id);
+      if ($order) {
+        $event_data['custom_data'] = [
+          'currency' => $order->get_currency(),
+          'value'    => floatval($order->get_total()),
+        ];
+      }
+    }
+
     $payload = [
-      'data' => [[
-        'event_name'       => $event,
-        'event_time'       => time(),
-        'action_source'    => 'website',
-        'event_source_url' => $url,
-        'user_data'        => array_filter([
-          'fbc'              => $fbc,
-          'client_ip_address'=> $ip,
-          'client_user_agent'=> $ua,
-        ]),
-      ]],
+      'data' => [$event_data],
     ];
 
     if (!empty($testcode)) $payload['test_event_code'] = $testcode;
@@ -280,7 +319,7 @@ class Minimal_Meta_CAPI_No_Pixel {
   public function woocommerce_thankyou($order_id) {
     // Only fire if WooCommerce integration is enabled
     if (self::is_woocommerce_enabled()) {
-      echo do_shortcode('[meta_capi_conversion]');
+      echo do_shortcode('[meta_capi_conversion order_id="' . absint($order_id) . '"]');
     }
   }
 
