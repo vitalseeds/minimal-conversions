@@ -32,6 +32,8 @@ class Minimal_Meta_CAPI_No_Pixel {
       setcookie(self::COOKIE_KEY, $fbclid, $expire, COOKIEPATH ?: '/', '', $secure, true);
       // Keep PHP superglobal in sync for this request.
       $_COOKIE[self::COOKIE_KEY] = $fbclid;
+
+      $this->debug_log('Captured fbclid from URL: ' . $fbclid . ' | URL: ' . (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : 'unknown'));
     }
   }
 
@@ -71,6 +73,9 @@ class Minimal_Meta_CAPI_No_Pixel {
             esc_attr($key),
             esc_attr($val)
           );
+          if ($key === 'test_event_code') {
+            echo '<p class="description">For testing only. Generate code in Meta Events Manager > Test Events. Leave blank for production.</p>';
+          }
         },
         'minimal-meta-capi',
         'mmcapi_main'
@@ -117,6 +122,24 @@ class Minimal_Meta_CAPI_No_Pixel {
       'minimal-meta-capi',
       'mmcapi_main'
     );
+
+    // Debug logging checkbox
+    add_settings_field(
+      'debug_logging',
+      esc_html('Debug Logging'),
+      function () {
+        $opts = get_option(self::OPT_KEY, []);
+        $checked = !empty($opts['debug_logging']);
+        printf(
+          '<label><input type="checkbox" name="%s[debug_logging]" value="1" %s /> Enable debug logging</label>',
+          esc_attr(self::OPT_KEY),
+          checked($checked, true, false)
+        );
+        echo '<p class="description">Log fbclid captures and API calls to WordPress debug log.</p>';
+      },
+      'minimal-meta-capi',
+      'mmcapi_main'
+    );
   }
 
   public function sanitize_settings($in) {
@@ -125,7 +148,15 @@ class Minimal_Meta_CAPI_No_Pixel {
       'access_token'     => isset($in['access_token']) ? sanitize_text_field($in['access_token']) : '',
       'event_name'       => isset($in['event_name']) ? sanitize_text_field($in['event_name']) : 'Purchase',
       'test_event_code'  => isset($in['test_event_code']) ? sanitize_text_field($in['test_event_code']) : '',
+      'debug_logging'    => !empty($in['debug_logging']) ? 1 : 0,
     ];
+  }
+
+  private function debug_log($message) {
+    $opts = get_option(self::OPT_KEY, []);
+    if (!empty($opts['debug_logging'])) {
+      error_log('[Minimal Meta CAPI] ' . $message);
+    }
   }
 
   public function settings_page() {
@@ -192,11 +223,22 @@ class Minimal_Meta_CAPI_No_Pixel {
 
     $endpoint = sprintf('https://graph.facebook.com/v19.0/%s/events?access_token=%s', rawurlencode($pixel_id), rawurlencode($token));
 
+    $this->debug_log('Firing conversion event: ' . $event . ' | fbclid: ' . $fbclid . ' | URL: ' . $url);
+    $this->debug_log('API Payload: ' . wp_json_encode($payload));
+
     $resp = wp_remote_post($endpoint, [
       'timeout' => 5,
       'headers' => ['Content-Type' => 'application/json'],
       'body'    => wp_json_encode($payload),
     ]);
+
+    if (is_wp_error($resp)) {
+      $this->debug_log('API Error: ' . $resp->get_error_message());
+    } else {
+      $response_code = wp_remote_retrieve_response_code($resp);
+      $response_body = wp_remote_retrieve_body($resp);
+      $this->debug_log('API Response [' . $response_code . ']: ' . $response_body);
+    }
 
     // Set "fired" cookie for 1 hour to reduce accidental re-fires.
     $expire = time() + HOUR_IN_SECONDS;
