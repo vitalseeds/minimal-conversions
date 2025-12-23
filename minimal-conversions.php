@@ -11,6 +11,9 @@ if (!defined('ABSPATH')) exit;
 class Minimal_Meta_CAPI_No_Pixel {
   const OPT_KEY = 'mmcapi_settings';
   const COOKIE_KEY = 'mmcapi_fbclid';
+  const COOKIE_KEY_SOURCE = 'mmcapi_utm_source';
+  const COOKIE_KEY_MEDIUM = 'mmcapi_utm_medium';
+  const COOKIE_KEY_CAMPAIGN = 'mmcapi_utm_campaign';
   const COOKIE_DAYS = 7;
 
   public function __construct() {
@@ -26,15 +29,42 @@ class Minimal_Meta_CAPI_No_Pixel {
 
     if (!empty($_GET['fbclid'])) {
       $fbclid = sanitize_text_field(wp_unslash($_GET['fbclid']));
+      $utm_source = isset($_GET['utm_source']) ? sanitize_text_field(wp_unslash($_GET['utm_source'])) : '';
+      $utm_medium = isset($_GET['utm_medium']) ? sanitize_text_field(wp_unslash($_GET['utm_medium'])) : '';
+      $utm_campaign = isset($_GET['utm_campaign']) ? sanitize_text_field(wp_unslash($_GET['utm_campaign'])) : '';
+
       // Store only what we need, as a first-party cookie.
       $expire = time() + (self::COOKIE_DAYS * DAY_IN_SECONDS);
       // Secure/HTTPOnly where possible.
       $secure = is_ssl();
       setcookie(self::COOKIE_KEY, $fbclid, $expire, COOKIEPATH ?: '/', '', $secure, true);
+
+      if (!empty($utm_source)) {
+        setcookie(self::COOKIE_KEY_SOURCE, $utm_source, $expire, COOKIEPATH ?: '/', '', $secure, true);
+        $_COOKIE[self::COOKIE_KEY_SOURCE] = $utm_source;
+      }
+      if (!empty($utm_medium)) {
+        setcookie(self::COOKIE_KEY_MEDIUM, $utm_medium, $expire, COOKIEPATH ?: '/', '', $secure, true);
+        $_COOKIE[self::COOKIE_KEY_MEDIUM] = $utm_medium;
+      }
+      if (!empty($utm_campaign)) {
+        setcookie(self::COOKIE_KEY_CAMPAIGN, $utm_campaign, $expire, COOKIEPATH ?: '/', '', $secure, true);
+        $_COOKIE[self::COOKIE_KEY_CAMPAIGN] = $utm_campaign;
+      }
+
       // Keep PHP superglobal in sync for this request.
       $_COOKIE[self::COOKIE_KEY] = $fbclid;
 
       $this->debug_log('Captured fbclid from URL: ' . $fbclid . ' | URL: ' . (isset($_SERVER['REQUEST_URI']) ? $_SERVER['REQUEST_URI'] : 'unknown'));
+      if (!empty($utm_source)) {
+        $this->debug_log('Captured utm_source from URL: ' . $utm_source);
+      }
+      if (!empty($utm_medium)) {
+        $this->debug_log('Captured utm_medium from URL: ' . $utm_medium);
+      }
+      if (!empty($utm_campaign)) {
+        $this->debug_log('Captured utm_campaign from URL: ' . $utm_campaign);
+      }
     }
   }
 
@@ -313,6 +343,38 @@ class Minimal_Meta_CAPI_No_Pixel {
     $secure = is_ssl();
     setcookie($once_key, '1', $expire, COOKIEPATH ?: '/', '', $secure, true);
 
+    // Set the WC order attribution UTM parameters
+    if ($order_id > 0 && function_exists('wc_get_order')) {
+      $order = wc_get_order($order_id);
+      if ($order) {
+        $updated = false;
+
+        if (isset($_COOKIE[self::COOKIE_KEY_SOURCE])) {
+          $utm_source = sanitize_text_field(wp_unslash($_COOKIE[self::COOKIE_KEY_SOURCE]));
+          $order->update_meta_data('_wc_order_attribution_utm_source', $utm_source);
+          $this->debug_log('Set order #' . $order_id . ' utm_source to: ' . $utm_source);
+          $updated = true;
+        }
+
+        if (isset($_COOKIE[self::COOKIE_KEY_MEDIUM])) {
+          $utm_medium = sanitize_text_field(wp_unslash($_COOKIE[self::COOKIE_KEY_MEDIUM]));
+          $order->update_meta_data('_wc_order_attribution_utm_medium', $utm_medium);
+          $this->debug_log('Set order #' . $order_id . ' utm_medium to: ' . $utm_medium);
+          $updated = true;
+        }
+
+        if (isset($_COOKIE[self::COOKIE_KEY_CAMPAIGN])) {
+          $utm_campaign = sanitize_text_field(wp_unslash($_COOKIE[self::COOKIE_KEY_CAMPAIGN]));
+          $order->update_meta_data('_wc_order_attribution_utm_campaign', $utm_campaign);
+          $this->debug_log('Set order #' . $order_id . ' utm_campaign to: ' . $utm_campaign);
+          $updated = true;
+        }
+
+        if ($updated) {
+          $order->save();
+        }
+      }
+    }
     // Silent by default; return empty to not affect page output.
     return '';
   }
